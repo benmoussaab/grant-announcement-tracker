@@ -1,0 +1,38 @@
+name: Daily Grant Scrape
+
+on:
+  schedule:
+    - cron: '17 6 * * *'  # runs daily at 06:17 UTC
+  workflow_dispatch:  # lets you trigger it manually too
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install apify-client google-genai rapidfuzz requests
+
+      - name: Run daily scrape
+        env:
+          APIFY_TOKEN_1: ${{ secrets.APIFY_TOKEN_1 }}
+          APIFY_TOKEN_2: ${{ secrets.APIFY_TOKEN_2 }}
+          GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
+          GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
+          GEMINI_API_KEY_3: ${{ secrets.GEMINI_API_KEY_3 }}
+        run: python daily_scrape.py
+
+      - name: Commit updated data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add announcements.db scrape_progress.json
+          git diff --staged --quiet || git commit -m "Daily scrape update"
+          git push

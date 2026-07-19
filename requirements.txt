@@ -1,0 +1,7 @@
+apify-client
+google-genai
+rapidfuzz
+requests
+streamlit
+plotly
+pandas
