@@ -1,0 +1,287 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+from apify_client._docs import docs_group
+from apify_client._models import (
+    ListOfWebhooks,
+    ListOfWebhooksResponse,
+    WebhookCondition,
+    WebhookCreate,
+    WebhookResponse,
+)
+from apify_client._pagination import get_items_iterator, get_items_iterator_async
+from apify_client._resource_clients._resource_client import ResourceClient, ResourceClientAsync
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Iterator
+
+    from apify_client._literals import WebhookEventType
+    from apify_client._models import Webhook, WebhookShort
+    from apify_client.types import Timeout
+
+
+@docs_group('Resource clients')
+class WebhookCollectionClient(ResourceClient):
+    """Sub-client for the webhook collection.
+
+    Provides methods to manage the webhook collection, e.g. list or create webhooks. Obtain an instance via an
+    appropriate method on the `ApifyClient` class.
+    """
+
+    def __init__(
+        self,
+        *,
+        resource_path: str = 'webhooks',
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(
+            resource_path=resource_path,
+            **kwargs,
+        )
+
+    def list(
+        self,
+        *,
+        limit: int | None = None,
+        offset: int | None = None,
+        desc: bool | None = None,
+        timeout: Timeout = 'medium',
+    ) -> ListOfWebhooks:
+        """List the available webhooks.
+
+        https://docs.apify.com/api/v2#/reference/webhooks/webhook-collection/get-list-of-webhooks
+
+        Args:
+            limit: How many webhooks to retrieve.
+            offset: What webhook to include as first when retrieving the list.
+            desc: Whether to sort the webhooks in descending order based on their date of creation.
+            timeout: Timeout for the API HTTP request.
+
+        Returns:
+            The list of available webhooks matching the specified filters.
+        """
+        result = self._list(timeout=timeout, limit=limit, offset=offset, desc=desc)
+        return ListOfWebhooksResponse.model_validate(result).data
+
+    def iterate(
+        self,
+        *,
+        limit: int | None = None,
+        offset: int | None = None,
+        desc: bool | None = None,
+        timeout: Timeout = 'medium',
+    ) -> Iterator[WebhookShort]:
+        """Iterate over the available webhooks.
+
+        Simple `list` does only one API call, possibly not listing all items matching the criteria. This method
+        returns an iterator that is capable of making multiple API calls to retrieve all items matching the criteria.
+
+        https://docs.apify.com/api/v2#/reference/webhooks/webhook-collection/get-list-of-webhooks
+
+        Args:
+            limit: How many webhooks to retrieve.
+            offset: What webhook to include as first when retrieving the list.
+            desc: Whether to sort the webhooks in descending order based on their date of creation.
+            timeout: Timeout for the API HTTP request.
+
+        Yields:
+            The available webhooks matching the specified filters.
+        """
+
+        def _callback(*, limit: int | None = None, offset: int | None = None) -> ListOfWebhooks:
+            return self.list(limit=limit, offset=offset, desc=desc, timeout=timeout)
+
+        return get_items_iterator(_callback, limit=limit, offset=offset)
+
+    def create(
+        self,
+        *,
+        event_types: list[WebhookEventType],  # ty: ignore[invalid-type-form]
+        request_url: str,
+        payload_template: str | None = None,
+        headers_template: str | None = None,
+        actor_id: str | None = None,
+        actor_task_id: str | None = None,
+        actor_run_id: str | None = None,
+        ignore_ssl_errors: bool | None = None,
+        do_not_retry: bool | None = None,
+        idempotency_key: str | None = None,
+        is_ad_hoc: bool | None = None,
+        timeout: Timeout = 'short',
+    ) -> Webhook:
+        """Create a new webhook.
+
+        You have to specify exactly one out of actor_id, actor_task_id or actor_run_id.
+
+        https://docs.apify.com/api/v2#/reference/webhooks/webhook-collection/create-webhook
+
+        Args:
+            event_types: List of event types that should trigger the webhook. At least one is required.
+            request_url: URL that will be invoked once the webhook is triggered.
+            payload_template: Specification of the payload that will be sent to request_url.
+            headers_template: Headers that will be sent to the request_url.
+            actor_id: Id of the Actor whose runs should trigger the webhook.
+            actor_task_id: Id of the Actor task whose runs should trigger the webhook.
+            actor_run_id: Id of the Actor run which should trigger the webhook.
+            ignore_ssl_errors: Whether the webhook should ignore SSL errors returned by request_url.
+            do_not_retry: Whether the webhook should retry sending the payload to request_url upon failure.
+            idempotency_key: A unique identifier of a webhook. You can use it to ensure that you won't create
+                the same webhook multiple times.
+            is_ad_hoc: Set to True if you want the webhook to be triggered only the first time the condition
+                is fulfilled. Only applicable when actor_run_id is filled.
+            timeout: Timeout for the API HTTP request.
+
+        Returns:
+           The created webhook.
+        """
+        webhook_create = WebhookCreate(
+            event_types=list(event_types),
+            request_url=request_url,
+            payload_template=payload_template,
+            headers_template=headers_template,
+            ignore_ssl_errors=ignore_ssl_errors,
+            do_not_retry=do_not_retry,
+            idempotency_key=idempotency_key,
+            is_ad_hoc=is_ad_hoc if actor_run_id else None,
+            condition=WebhookCondition(
+                actor_run_id=actor_run_id,
+                actor_task_id=actor_task_id,
+                actor_id=actor_id,
+            ),
+        )
+        result = self._create(timeout=timeout, **webhook_create.model_dump(by_alias=True, exclude_none=True))
+        return WebhookResponse.model_validate(result).data
+
+
+@docs_group('Resource clients')
+class WebhookCollectionClientAsync(ResourceClientAsync):
+    """Sub-client for the webhook collection.
+
+    Provides methods to manage the webhook collection, e.g. list or create webhooks. Obtain an instance via an
+    appropriate method on the `ApifyClientAsync` class.
+    """
+
+    def __init__(
+        self,
+        *,
+        resource_path: str = 'webhooks',
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(
+            resource_path=resource_path,
+            **kwargs,
+        )
+
+    async def list(
+        self,
+        *,
+        limit: int | None = None,
+        offset: int | None = None,
+        desc: bool | None = None,
+        timeout: Timeout = 'medium',
+    ) -> ListOfWebhooks:
+        """List the available webhooks.
+
+        https://docs.apify.com/api/v2#/reference/webhooks/webhook-collection/get-list-of-webhooks
+
+        Args:
+            limit: How many webhooks to retrieve.
+            offset: What webhook to include as first when retrieving the list.
+            desc: Whether to sort the webhooks in descending order based on their date of creation.
+            timeout: Timeout for the API HTTP request.
+
+        Returns:
+            The list of available webhooks matching the specified filters.
+        """
+        result = await self._list(timeout=timeout, limit=limit, offset=offset, desc=desc)
+        return ListOfWebhooksResponse.model_validate(result).data
+
+    def iterate(
+        self,
+        *,
+        limit: int | None = None,
+        offset: int | None = None,
+        desc: bool | None = None,
+        timeout: Timeout = 'medium',
+    ) -> AsyncIterator[WebhookShort]:
+        """Iterate over the available webhooks.
+
+        Simple `list` does only one API call, possibly not listing all items matching the criteria. This method
+        returns an iterator that is capable of making multiple API calls to retrieve all items matching the criteria.
+
+        https://docs.apify.com/api/v2#/reference/webhooks/webhook-collection/get-list-of-webhooks
+
+        Args:
+            limit: How many webhooks to retrieve.
+            offset: What webhook to include as first when retrieving the list.
+            desc: Whether to sort the webhooks in descending order based on their date of creation.
+            timeout: Timeout for the API HTTP request.
+
+        Yields:
+            The available webhooks matching the specified filters.
+        """
+
+        async def _callback(*, limit: int | None = None, offset: int | None = None) -> ListOfWebhooks:
+            return await self.list(limit=limit, offset=offset, desc=desc, timeout=timeout)
+
+        return get_items_iterator_async(_callback, limit=limit, offset=offset)
+
+    async def create(
+        self,
+        *,
+        event_types: list[WebhookEventType],  # ty: ignore[invalid-type-form]
+        request_url: str,
+        payload_template: str | None = None,
+        headers_template: str | None = None,
+        actor_id: str | None = None,
+        actor_task_id: str | None = None,
+        actor_run_id: str | None = None,
+        ignore_ssl_errors: bool | None = None,
+        do_not_retry: bool | None = None,
+        idempotency_key: str | None = None,
+        is_ad_hoc: bool | None = None,
+        timeout: Timeout = 'short',
+    ) -> Webhook:
+        """Create a new webhook.
+
+        You have to specify exactly one out of actor_id, actor_task_id or actor_run_id.
+
+        https://docs.apify.com/api/v2#/reference/webhooks/webhook-collection/create-webhook
+
+        Args:
+            event_types: List of event types that should trigger the webhook. At least one is required.
+            request_url: URL that will be invoked once the webhook is triggered.
+            payload_template: Specification of the payload that will be sent to request_url.
+            headers_template: Headers that will be sent to the request_url.
+            actor_id: Id of the Actor whose runs should trigger the webhook.
+            actor_task_id: Id of the Actor task whose runs should trigger the webhook.
+            actor_run_id: Id of the Actor run which should trigger the webhook.
+            ignore_ssl_errors: Whether the webhook should ignore SSL errors returned by request_url.
+            do_not_retry: Whether the webhook should retry sending the payload to request_url upon failure.
+            idempotency_key: A unique identifier of a webhook. You can use it to ensure that you won't create
+                the same webhook multiple times.
+            is_ad_hoc: Set to True if you want the webhook to be triggered only the first time the condition
+                is fulfilled. Only applicable when actor_run_id is filled.
+            timeout: Timeout for the API HTTP request.
+
+        Returns:
+           The created webhook.
+        """
+        webhook_create = WebhookCreate(
+            event_types=list(event_types),
+            request_url=request_url,
+            payload_template=payload_template,
+            headers_template=headers_template,
+            ignore_ssl_errors=ignore_ssl_errors,
+            do_not_retry=do_not_retry,
+            idempotency_key=idempotency_key,
+            is_ad_hoc=is_ad_hoc if actor_run_id else None,
+            condition=WebhookCondition(
+                actor_run_id=actor_run_id,
+                actor_task_id=actor_task_id,
+                actor_id=actor_id,
+            ),
+        )
+        result = await self._create(timeout=timeout, **webhook_create.model_dump(by_alias=True, exclude_none=True))
+        return WebhookResponse.model_validate(result).data

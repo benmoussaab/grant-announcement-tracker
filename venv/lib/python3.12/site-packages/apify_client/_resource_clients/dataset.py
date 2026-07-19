@@ -1,0 +1,1183 @@
+from __future__ import annotations
+
+from contextlib import asynccontextmanager, contextmanager
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+from urllib.parse import urlencode, urlparse, urlunparse
+
+from apify_client._docs import docs_group
+from apify_client._models import Dataset, DatasetResponse, DatasetStatistics, DatasetStatisticsResponse
+from apify_client._pagination import DEFAULT_CHUNK_SIZE, get_items_iterator, get_items_iterator_async
+from apify_client._resource_clients._resource_client import ResourceClient, ResourceClientAsync
+from apify_client._utils import (
+    create_storage_content_signature,
+    response_to_dict,
+    response_to_list,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Iterator
+    from datetime import timedelta
+
+    from apify_client._literals import GeneralAccess
+    from apify_client.http_clients import HttpResponse
+    from apify_client.types import JsonSerializable, Timeout
+
+
+@docs_group('Other')
+@dataclass
+class DatasetItemsPage:
+    """A page of dataset items returned by the `list_items` method.
+
+    Dataset items are arbitrary JSON objects stored in the dataset, so they cannot be
+    represented by a specific Pydantic model. This class provides pagination metadata
+    along with the raw items.
+    """
+
+    items: list[dict[str, Any]]
+    """List of dataset items. Each item is a JSON object (dictionary)."""
+
+    total: int
+    """Total number of items in the dataset."""
+
+    offset: int
+    """The offset of the first item in this page."""
+
+    count: int
+    """Number of items in this page."""
+
+    limit: int
+    """The limit that was used for this request."""
+
+    desc: bool
+    """Whether the items are sorted in descending order."""
+
+
+@docs_group('Resource clients')
+class DatasetClient(ResourceClient):
+    """Sub-client for managing a specific dataset.
+
+    Provides methods to manage a specific dataset, e.g. get it, update it, or download its items. Obtain an instance
+    via an appropriate method on the `ApifyClient` class.
+    """
+
+    def __init__(
+        self,
+        *,
+        resource_id: str | None = None,
+        resource_path: str = 'datasets',
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(
+            resource_id=resource_id,
+            resource_path=resource_path,
+            **kwargs,
+        )
+
+    def get(self, *, timeout: Timeout = 'short') -> Dataset | None:
+        """Retrieve the dataset.
+
+        https://docs.apify.com/api/v2#/reference/datasets/dataset/get-dataset
+
+        Args:
+            timeout: Timeout for the API HTTP request.
+
+        Returns:
+            The retrieved dataset, or None, if it does not exist.
+        """
+        result = self._get(timeout=timeout)
+        if result is None:
+            return None
+        return DatasetResponse.model_validate(result).data
+
+    def update(
+        self,
+        *,
+        name: str | None = None,
+        general_access: GeneralAccess | None = None,
+        timeout: Timeout = 'short',
+    ) -> Dataset:
+        """Update the dataset with specified fields.
+
+        https://docs.apify.com/api/v2#/reference/datasets/dataset/update-dataset
+
+        Args:
+            name: The new name for the dataset.
+            general_access: Determines how others can access the dataset.
+            timeout: Timeout for the API HTTP request.
+
+        Returns:
+            The updated dataset.
+        """
+        result = self._update(
+            timeout=timeout,
+            name=name,
+            generalAccess=general_access,
+        )
+        return DatasetResponse.model_validate(result).data
+
+    def delete(self, *, timeout: Timeout = 'short') -> None:
+        """Delete the dataset.
+
+        https://docs.apify.com/api/v2#/reference/datasets/dataset/delete-dataset
+
+        Args:
+            timeout: Timeout for the API HTTP request.
+        """
+        self._delete(timeout=timeout)
+
+    def list_items(
+        self,
+        *,
+        offset: int | None = None,
+        limit: int | None = None,
+        clean: bool | None = None,
+        desc: bool | None = None,
+        fields: list[str] | None = None,
+        omit: list[str] | None = None,
+        unwind: list[str] | None = None,
+        skip_empty: bool | None = None,
+        skip_hidden: bool | None = None,
+        flatten: list[str] | None = None,
+        view: str | None = None,
+        signature: str | None = None,
+        timeout: Timeout = 'long',
+    ) -> DatasetItemsPage:
+        """List the items of the dataset.
+
+        https://docs.apify.com/api/v2#/reference/datasets/item-collection/get-items
+
+        Args:
+            offset: Number of items that should be skipped at the start. The default value is 0.
+            limit: Maximum number of items to return. By default there is no limit.
+            desc: By default, results are returned in the same order as they were stored. To reverse the order,
+                set this parameter to True.
+            clean: If True, returns only non-empty items and skips hidden fields (i.e. fields starting with
+                the # character). The clean parameter is just a shortcut for skip_hidden=True and skip_empty=True
+                parameters. Note that since some objects might be skipped from the output, that the result might
+                contain less items than the limit value.
+            fields: A list of fields which should be picked from the items, only these fields will remain
+                in the resulting record objects. Note that the fields in the outputted items are sorted the same
+                way as they are specified in the fields parameter. You can use this feature to effectively fix
+                the output format.
+            omit: A list of fields which should be omitted from the items.
+            unwind: A list of fields which should be unwound, in order which they should be processed. Each field
+                should be either an array or an object. If the field is an array then every element of the array
+                will become a separate record and merged with parent object. If the unwound field is an object then
+                it is merged with the parent object. If the unwound field is missing or its value is neither an array
+                nor an object and therefore cannot be merged with a parent object, then the item gets preserved
+                as it is. Note that the unwound items ignore the desc parameter.
+            skip_empty: If True, then empty items are skipped from the output. Note that if used, the results might
+                contain less items than the limit value.
+            skip_hidden: If True, then hidden fields are skipped from the output, i.e. fields starting with
+                the # character.
+            flatten: A list of fields that should be flattened.
+            view: Name of the dataset view to be used.
+            signature: Signature used to access the items.
+            timeout: Timeout for the API HTTP request.
+
+        Returns:
+            A page of the list of dataset items according to the specified filters.
+        """
+        request_params = self._build_params(
+            offset=offset,
+            limit=limit,
+            desc=desc,
+            clean=clean,
+            fields=fields,
+            omit=omit,
+            unwind=unwind,
+            skipEmpty=skip_empty,
+            skipHidden=skip_hidden,
+            flatten=flatten,
+            view=view,
+            signature=signature,
+        )
+
+        response = self._http_client.call(
+            url=self._build_url('items'),
+            method='GET',
+            params=request_params,
+            timeout=timeout,
+        )
+
+        # When using signature, API returns items as list directly
+        items = response_to_list(response)
+
+        return DatasetItemsPage(
+            items=items,
+            total=int(response.headers['x-apify-pagination-total']),
+            offset=int(response.headers['x-apify-pagination-offset']),
+            # x-apify-pagination-count returns count of processed items, not count of returned items
+            # This makes difference when items were filtered using hidden/empty
+            count=max(int(response.headers['x-apify-pagination-count']), len(items)),
+            # API returns 999999999999 when no limit is used
+            limit=int(response.headers['x-apify-pagination-limit']),
+            desc=response.headers['x-apify-pagination-desc'].lower() == 'true',
+        )
+
+    def iterate_items(
+        self,
+        *,
+        offset: int | None = None,
+        limit: int | None = None,
+        clean: bool | None = None,
+        desc: bool | None = None,
+        fields: list[str] | None = None,
+        omit: list[str] | None = None,
+        unwind: list[str] | None = None,
+        skip_empty: bool | None = None,
+        skip_hidden: bool | None = None,
+        signature: str | None = None,
+        chunk_size: int | None = None,
+        timeout: Timeout = 'long',
+    ) -> Iterator[dict]:
+        """Iterate over the items in the dataset.
+
+        Simple `list_items` does only one API call, possibly not listing all items matching the criteria. This method
+        returns an iterator that is capable of making multiple API calls to retrieve all items matching the criteria.
+
+        https://docs.apify.com/api/v2#/reference/datasets/item-collection/get-items
+
+        Args:
+            offset: Number of items that should be skipped at the start. The default value is 0.
+            limit: Maximum number of items to return. By default there is no limit.
+            desc: By default, results are returned in the same order as they were stored. To reverse the order,
+                set this parameter to True.
+            clean: If True, returns only non-empty items and skips hidden fields (i.e. fields starting with
+                the # character). The clean parameter is just a shortcut for skip_hidden=True and skip_empty=True
+                parameters. Note that since some objects might be skipped from the output, that the result might
+                contain less items than the limit value.
+            fields: A list of fields which should be picked from the items, only these fields will remain in
+                the resulting record objects. Note that the fields in the outputted items are sorted the same way
+                as they are specified in the fields parameter. You can use this feature to effectively fix
+                the output format.
+            omit: A list of fields which should be omitted from the items.
+            unwind: A list of fields which should be unwound, in order which they should be processed. Each field
+                should be either an array or an object. If the field is an array then every element of the array
+                will become a separate record and merged with parent object. If the unwound field is an object then
+                it is merged with the parent object. If the unwound field is missing or its value is neither an array
+                nor an object and therefore cannot be merged with a parent object, then the item gets preserved
+                as it is. Note that the unwound items ignore the desc parameter.
+            skip_empty: If True, then empty items are skipped from the output. Note that if used, the results might
+                contain less items than the limit value.
+            skip_hidden: If True, then hidden fields are skipped from the output, i.e. fields starting with
+                the # character.
+            signature: Signature used to access the items.
+            chunk_size: Maximum number of items requested per API call when iterating across pages.
+            timeout: Timeout for the API HTTP request.
+
+        Yields:
+            An item from the dataset.
+        """
+
+        def _callback(*, limit: int | None = None, offset: int | None = None) -> DatasetItemsPage:
+            return self.list_items(
+                offset=offset,
+                limit=limit,
+                clean=clean,
+                desc=desc,
+                fields=fields,
+                omit=omit,
+                unwind=unwind,
+                skip_empty=skip_empty,
+                skip_hidden=skip_hidden,
+                signature=signature,
+                timeout=timeout,
+            )
+
+        return get_items_iterator(_callback, limit=limit, offset=offset, chunk_size=chunk_size or DEFAULT_CHUNK_SIZE)
+
+    def get_items_as_bytes(
+        self,
+        *,
+        item_format: str = 'json',
+        offset: int | None = None,
+        limit: int | None = None,
+        desc: bool | None = None,
+        clean: bool | None = None,
+        bom: bool | None = None,
+        delimiter: str | None = None,
+        fields: list[str] | None = None,
+        omit: list[str] | None = None,
+        unwind: list[str] | None = None,
+        skip_empty: bool | None = None,
+        skip_header_row: bool | None = None,
+        skip_hidden: bool | None = None,
+        xml_root: str | None = None,
+        xml_row: str | None = None,
+        flatten: list[str] | None = None,
+        signature: str | None = None,
+        timeout: Timeout = 'long',
+    ) -> bytes:
+        """Get the items in the dataset as raw bytes.
+
+        https://docs.apify.com/api/v2#/reference/datasets/item-collection/get-items
+
+        Args:
+            item_format: Format of the results, possible values are: json, jsonl, csv, html, xlsx, xml and rss.
+                The default value is json.
+            offset: Number of items that should be skipped at the start. The default value is 0.
+            limit: Maximum number of items to return. By default there is no limit.
+            desc: By default, results are returned in the same order as they were stored. To reverse the order,
+                set this parameter to True.
+            clean: If True, returns only non-empty items and skips hidden fields (i.e. fields starting with
+                the # character). The clean parameter is just a shortcut for skip_hidden=True and skip_empty=True
+                parameters. Note that since some objects might be skipped from the output, that the result might
+                contain less items than the limit value.
+            bom: All text responses are encoded in UTF-8 encoding. By default, csv files are prefixed with
+                the UTF-8 Byte Order Mark (BOM), while json, jsonl, xml, html and rss files are not. If you want
+                to override this default behavior, specify bom=True query parameter to include the BOM or bom=False
+                to skip it.
+            delimiter: A delimiter character for CSV files. The default delimiter is a simple comma (,).
+            fields: A list of fields which should be picked from the items, only these fields will remain
+                in the resulting record objects. Note that the fields in the outputted items are sorted the same
+                way as they are specified in the fields parameter. You can use this feature to effectively fix
+                the output format.
+                You can use this feature to effectively fix the output format.
+            omit: A list of fields which should be omitted from the items.
+            unwind: A list of fields which should be unwound, in order which they should be processed. Each field
+                should be either an array or an object. If the field is an array then every element of the array
+                will become a separate record and merged with parent object. If the unwound field is an object then
+                it is merged with the parent object. If the unwound field is missing or its value is neither an array
+                nor an object and therefore cannot be merged with a parent object, then the item gets preserved
+                as it is. Note that the unwound items ignore the desc parameter.
+            skip_empty: If True, then empty items are skipped from the output. Note that if used, the results might
+                contain less items than the limit value.
+            skip_header_row: If True, then header row in the csv format is skipped.
+            skip_hidden: If True, then hidden fields are skipped from the output, i.e. fields starting with
+                the # character.
+            xml_root: Overrides default root element name of xml output. By default the root element is items.
+            xml_row: Overrides default element name that wraps each page or page function result object in xml output.
+                By default the element name is item.
+            flatten: A list of fields that should be flattened.
+            signature: Signature used to access the items.
+            timeout: Timeout for the API HTTP request.
+
+        Returns:
+            The dataset items as raw bytes.
+        """
+        request_params = self._build_params(
+            format=item_format,
+            offset=offset,
+            limit=limit,
+            desc=desc,
+            clean=clean,
+            bom=bom,
+            delimiter=delimiter,
+            fields=fields,
+            omit=omit,
+            unwind=unwind,
+            skipEmpty=skip_empty,
+            skipHeaderRow=skip_header_row,
+            skipHidden=skip_hidden,
+            xmlRoot=xml_root,
+            xmlRow=xml_row,
+            flatten=flatten,
+            signature=signature,
+        )
+
+        response = self._http_client.call(
+            url=self._build_url('items'),
+            method='GET',
+            params=request_params,
+            timeout=timeout,
+        )
+
+        return response.content
+
+    @contextmanager
+    def stream_items(
+        self,
+        *,
+        item_format: str = 'json',
+        offset: int | None = None,
+        limit: int | None = None,
+        desc: bool | None = None,
+        clean: bool | None = None,
+        bom: bool | None = None,
+        delimiter: str | None = None,
+        fields: list[str] | None = None,
+        omit: list[str] | None = None,
+        unwind: list[str] | None = None,
+        skip_empty: bool | None = None,
+        skip_header_row: bool | None = None,
+        skip_hidden: bool | None = None,
+        xml_root: str | None = None,
+        xml_row: str | None = None,
+        signature: str | None = None,
+        timeout: Timeout = 'long',
+    ) -> Iterator[HttpResponse]:
+        """Retrieve the items in the dataset as a stream.
+
+        https://docs.apify.com/api/v2#/reference/datasets/item-collection/get-items
+
+        Args:
+            item_format: Format of the results, possible values are: json, jsonl, csv, html, xlsx, xml and rss.
+                The default value is json.
+            offset: Number of items that should be skipped at the start. The default value is 0.
+            limit: Maximum number of items to return. By default there is no limit.
+            desc: By default, results are returned in the same order as they were stored. To reverse the order,
+                set this parameter to True.
+            clean: If True, returns only non-empty items and skips hidden fields (i.e. fields starting with
+                the # character). The clean parameter is just a shortcut for skip_hidden=True and skip_empty=True
+                parameters. Note that since some objects might be skipped from the output, that the result might
+                contain less items than the limit value.
+            bom: All text responses are encoded in UTF-8 encoding. By default, csv files are prefixed with
+                the UTF-8 Byte Order Mark (BOM), while json, jsonl, xml, html and rss files are not. If you want
+                to override this default behavior, specify bom=True query parameter to include the BOM or bom=False
+                to skip it.
+            delimiter: A delimiter character for CSV files. The default delimiter is a simple comma (,).
+            fields: A list of fields which should be picked from the items, only these fields will remain
+                in the resulting record objects. Note that the fields in the outputted items are sorted the same
+                way as they are specified in the fields parameter. You can use this feature to effectively fix
+                the output format.
+                You can use this feature to effectively fix the output format.
+            omit: A list of fields which should be omitted from the items.
+            unwind: A list of fields which should be unwound, in order which they should be processed. Each field
+                should be either an array or an object. If the field is an array then every element of the array
+                will become a separate record and merged with parent object. If the unwound field is an object then
+                it is merged with the parent object. If the unwound field is missing or its value is neither an array
+                nor an object and therefore cannot be merged with a parent object, then the item gets preserved
+                as it is. Note that the unwound items ignore the desc parameter.
+            skip_empty: If True, then empty items are skipped from the output. Note that if used, the results might
+                contain less items than the limit value.
+            skip_header_row: If True, then header row in the csv format is skipped.
+            skip_hidden: If True, then hidden fields are skipped from the output, i.e. fields starting with
+                the # character.
+            xml_root: Overrides default root element name of xml output. By default the root element is items.
+            xml_row: Overrides default element name that wraps each page or page function result object in xml output.
+                By default the element name is item.
+            signature: Signature used to access the items.
+            timeout: Timeout for the API HTTP request.
+
+        Returns:
+            The dataset items as a context-managed streaming `Response`.
+        """
+        response = None
+        try:
+            request_params = self._build_params(
+                format=item_format,
+                offset=offset,
+                limit=limit,
+                desc=desc,
+                clean=clean,
+                bom=bom,
+                delimiter=delimiter,
+                fields=fields,
+                omit=omit,
+                unwind=unwind,
+                skipEmpty=skip_empty,
+                skipHeaderRow=skip_header_row,
+                skipHidden=skip_hidden,
+                xmlRoot=xml_root,
+                xmlRow=xml_row,
+                signature=signature,
+            )
+
+            response = self._http_client.call(
+                url=self._build_url('items'),
+                method='GET',
+                params=request_params,
+                stream=True,
+                timeout=timeout,
+            )
+            yield response
+        finally:
+            if response:
+                response.close()
+
+    def push_items(self, items: JsonSerializable, *, timeout: Timeout = 'medium') -> None:
+        """Push items to the dataset.
+
+        https://docs.apify.com/api/v2#/reference/datasets/item-collection/put-items
+
+        Args:
+            items: The items which to push in the dataset. Either a stringified JSON, a dictionary, or a list
+                of strings or dictionaries.
+            timeout: Timeout for the API HTTP request.
+        """
+        data = None
+        json = None
+
+        if isinstance(items, str):
+            data = items
+        else:
+            json = items
+
+        self._http_client.call(
+            url=self._build_url('items'),
+            method='POST',
+            headers={'content-type': 'application/json; charset=utf-8'},
+            params=self._build_params(),
+            data=data,
+            json=json,
+            timeout=timeout,
+        )
+
+    def get_statistics(self, *, timeout: Timeout = 'short') -> DatasetStatistics:
+        """Get the dataset statistics.
+
+        https://docs.apify.com/api/v2#tag/DatasetsStatistics/operation/dataset_statistics_get
+
+        Args:
+            timeout: Timeout for the API HTTP request.
+
+        Returns:
+            The dataset statistics.
+
+        Raises:
+            NotFoundError: If the dataset does not exist.
+        """
+        response = self._http_client.call(
+            url=self._build_url('statistics'),
+            method='GET',
+            params=self._build_params(),
+            timeout=timeout,
+        )
+        result = response_to_dict(response)
+        return DatasetStatisticsResponse.model_validate(result).data
+
+    def create_items_public_url(
+        self,
+        *,
+        offset: int | None = None,
+        limit: int | None = None,
+        clean: bool | None = None,
+        desc: bool | None = None,
+        fields: list[str] | None = None,
+        omit: list[str] | None = None,
+        unwind: list[str] | None = None,
+        skip_empty: bool | None = None,
+        skip_hidden: bool | None = None,
+        flatten: list[str] | None = None,
+        view: str | None = None,
+        expires_in: timedelta | None = None,
+        timeout: Timeout = 'long',
+    ) -> str:
+        """Generate a URL that can be used to access dataset items.
+
+        If the client has permission to access the dataset's URL signing key,
+        the URL will include a signature to verify its authenticity.
+
+        You can optionally control how long the signed URL should be valid using the `expires_in` option.
+        This value sets the expiration duration from the time the URL is generated.
+        If not provided, the URL will not expire.
+
+        Any other options (like `limit` or `offset`) will be included as query parameters in the URL.
+
+        Args:
+            offset: Number of items that should be skipped at the start. The default value is 0.
+            limit: Maximum number of items to return. By default there is no limit.
+            clean: If True, returns only non-empty items and skips hidden fields.
+            desc: By default, results are returned in the same order as they were stored. To reverse the order,
+                set this parameter to True.
+            fields: A list of fields which should be picked from the items.
+            omit: A list of fields which should be omitted from the items.
+            unwind: A list of fields which should be unwound, in order which they should be processed.
+            skip_empty: If True, then empty items are skipped from the output.
+            skip_hidden: If True, then hidden fields are skipped from the output.
+            flatten: A list of fields that should be flattened.
+            view: Name of the dataset view to be used.
+            expires_in: How long the signed URL should be valid.
+            timeout: Timeout for the API HTTP request.
+
+        Returns:
+            The public dataset items URL.
+        """
+        dataset = self.get(timeout=timeout)
+
+        request_params = self._build_params(
+            offset=offset,
+            limit=limit,
+            desc=desc,
+            clean=clean,
+            fields=fields,
+            omit=omit,
+            unwind=unwind,
+            skipEmpty=skip_empty,
+            skipHidden=skip_hidden,
+            flatten=flatten,
+            view=view,
+        )
+
+        if dataset and dataset.url_signing_secret_key:
+            signature = create_storage_content_signature(
+                dataset.id,
+                dataset.url_signing_secret_key,
+                expires_in=expires_in,
+            )
+            request_params['signature'] = signature
+
+        items_public_url = urlparse(self._build_url('items', public=True))
+        filtered_params = {k: v for k, v in request_params.items() if v is not None}
+        if filtered_params:
+            items_public_url = items_public_url._replace(query=urlencode(filtered_params))
+
+        return urlunparse(items_public_url)
+
+
+@docs_group('Resource clients')
+class DatasetClientAsync(ResourceClientAsync):
+    """Sub-client for managing a specific dataset.
+
+    Provides methods to manage a specific dataset, e.g. get it, update it, or download its items. Obtain an instance
+    via an appropriate method on the `ApifyClientAsync` class.
+    """
+
+    def __init__(
+        self,
+        *,
+        resource_id: str | None = None,
+        resource_path: str = 'datasets',
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(
+            resource_id=resource_id,
+            resource_path=resource_path,
+            **kwargs,
+        )
+
+    async def get(self, *, timeout: Timeout = 'short') -> Dataset | None:
+        """Retrieve the dataset.
+
+        https://docs.apify.com/api/v2#/reference/datasets/dataset/get-dataset
+
+        Args:
+            timeout: Timeout for the API HTTP request.
+
+        Returns:
+            The retrieved dataset, or None, if it does not exist.
+        """
+        result = await self._get(timeout=timeout)
+        if result is None:
+            return None
+        return DatasetResponse.model_validate(result).data
+
+    async def update(
+        self,
+        *,
+        name: str | None = None,
+        general_access: GeneralAccess | None = None,
+        timeout: Timeout = 'short',
+    ) -> Dataset:
+        """Update the dataset with specified fields.
+
+        https://docs.apify.com/api/v2#/reference/datasets/dataset/update-dataset
+
+        Args:
+            name: The new name for the dataset.
+            general_access: Determines how others can access the dataset.
+            timeout: Timeout for the API HTTP request.
+
+        Returns:
+            The updated dataset.
+        """
+        result = await self._update(
+            timeout=timeout,
+            name=name,
+            generalAccess=general_access,
+        )
+        return DatasetResponse.model_validate(result).data
+
+    async def delete(self, *, timeout: Timeout = 'short') -> None:
+        """Delete the dataset.
+
+        https://docs.apify.com/api/v2#/reference/datasets/dataset/delete-dataset
+
+        Args:
+            timeout: Timeout for the API HTTP request.
+        """
+        await self._delete(timeout=timeout)
+
+    async def list_items(
+        self,
+        *,
+        offset: int | None = None,
+        limit: int | None = None,
+        clean: bool | None = None,
+        desc: bool | None = None,
+        fields: list[str] | None = None,
+        omit: list[str] | None = None,
+        unwind: list[str] | None = None,
+        skip_empty: bool | None = None,
+        skip_hidden: bool | None = None,
+        flatten: list[str] | None = None,
+        view: str | None = None,
+        signature: str | None = None,
+        timeout: Timeout = 'long',
+    ) -> DatasetItemsPage:
+        """List the items of the dataset.
+
+        https://docs.apify.com/api/v2#/reference/datasets/item-collection/get-items
+
+        Args:
+            offset: Number of items that should be skipped at the start. The default value is 0.
+            limit: Maximum number of items to return. By default there is no limit.
+            desc: By default, results are returned in the same order as they were stored. To reverse the order,
+                set this parameter to True.
+            clean: If True, returns only non-empty items and skips hidden fields (i.e. fields starting with
+                the # character). The clean parameter is just a shortcut for skip_hidden=True and skip_empty=True
+                parameters. Note that since some objects might be skipped from the output, that the result might
+                contain less items than the limit value.
+            fields: A list of fields which should be picked from the items, only these fields will remain
+                in the resulting record objects. Note that the fields in the outputted items are sorted the same
+                way as they are specified in the fields parameter. You can use this feature to effectively fix
+                the output format.
+            omit: A list of fields which should be omitted from the items.
+            unwind: A list of fields which should be unwound, in order which they should be processed. Each field
+                should be either an array or an object. If the field is an array then every element of the array
+                will become a separate record and merged with parent object. If the unwound field is an object then
+                it is merged with the parent object. If the unwound field is missing or its value is neither an array
+                nor an object and therefore cannot be merged with a parent object, then the item gets preserved
+                as it is. Note that the unwound items ignore the desc parameter.
+            skip_empty: If True, then empty items are skipped from the output. Note that if used, the results might
+                contain less items than the limit value.
+            skip_hidden: If True, then hidden fields are skipped from the output, i.e. fields starting with
+                the # character.
+            flatten: A list of fields that should be flattened.
+            view: Name of the dataset view to be used.
+            signature: Signature used to access the items.
+            timeout: Timeout for the API HTTP request.
+
+        Returns:
+            A page of the list of dataset items according to the specified filters.
+        """
+        request_params = self._build_params(
+            offset=offset,
+            limit=limit,
+            desc=desc,
+            clean=clean,
+            fields=fields,
+            omit=omit,
+            unwind=unwind,
+            skipEmpty=skip_empty,
+            skipHidden=skip_hidden,
+            flatten=flatten,
+            view=view,
+            signature=signature,
+        )
+
+        response = await self._http_client.call(
+            url=self._build_url('items'),
+            method='GET',
+            params=request_params,
+            timeout=timeout,
+        )
+
+        # When using signature, API returns items as list directly
+        items = response_to_list(response)
+
+        return DatasetItemsPage(
+            items=items,
+            total=int(response.headers['x-apify-pagination-total']),
+            offset=int(response.headers['x-apify-pagination-offset']),
+            # x-apify-pagination-count returns count of processed items, not count of returned items
+            # This makes difference when items were filtered using hidden/empty
+            count=max(int(response.headers['x-apify-pagination-count']), len(items)),
+            # API returns 999999999999 when no limit is used
+            limit=int(response.headers['x-apify-pagination-limit']),
+            desc=response.headers['x-apify-pagination-desc'].lower() == 'true',
+        )
+
+    def iterate_items(
+        self,
+        *,
+        offset: int | None = None,
+        limit: int | None = None,
+        clean: bool | None = None,
+        desc: bool | None = None,
+        fields: list[str] | None = None,
+        omit: list[str] | None = None,
+        unwind: list[str] | None = None,
+        skip_empty: bool | None = None,
+        skip_hidden: bool | None = None,
+        signature: str | None = None,
+        chunk_size: int | None = None,
+        timeout: Timeout = 'long',
+    ) -> AsyncIterator[dict]:
+        """Iterate over the items in the dataset.
+
+        Simple `list_items` does only one API call, possibly not listing all items matching the criteria. This method
+        returns an iterator that is capable of making multiple API calls to retrieve all items matching the criteria.
+
+        https://docs.apify.com/api/v2#/reference/datasets/item-collection/get-items
+
+        Args:
+            offset: Number of items that should be skipped at the start. The default value is 0.
+            limit: Maximum number of items to return. By default there is no limit.
+            desc: By default, results are returned in the same order as they were stored. To reverse the order,
+                set this parameter to True.
+            clean: If True, returns only non-empty items and skips hidden fields (i.e. fields starting with
+                the # character). The clean parameter is just a shortcut for skip_hidden=True and skip_empty=True
+                parameters. Note that since some objects might be skipped from the output, that the result might
+                contain less items than the limit value.
+            fields: A list of fields which should be picked from the items, only these fields will remain in
+                the resulting record objects. Note that the fields in the outputted items are sorted the same way
+                as they are specified in the fields parameter. You can use this feature to effectively fix
+                the output format.
+            omit: A list of fields which should be omitted from the items.
+            unwind: A list of fields which should be unwound, in order which they should be processed. Each field
+                should be either an array or an object. If the field is an array then every element of the array
+                will become a separate record and merged with parent object. If the unwound field is an object then
+                it is merged with the parent object. If the unwound field is missing or its value is neither an array
+                nor an object and therefore cannot be merged with a parent object, then the item gets preserved
+                as it is. Note that the unwound items ignore the desc parameter.
+            skip_empty: If True, then empty items are skipped from the output. Note that if used, the results might
+                contain less items than the limit value.
+            skip_hidden: If True, then hidden fields are skipped from the output, i.e. fields starting with
+                the # character.
+            signature: Signature used to access the items.
+            chunk_size: Maximum number of items requested per API call when iterating across pages.
+            timeout: Timeout for the API HTTP request.
+
+        Yields:
+            An item from the dataset.
+        """
+
+        async def _callback(*, limit: int | None = None, offset: int | None = None) -> DatasetItemsPage:
+            return await self.list_items(
+                offset=offset,
+                limit=limit,
+                clean=clean,
+                desc=desc,
+                fields=fields,
+                omit=omit,
+                unwind=unwind,
+                skip_empty=skip_empty,
+                skip_hidden=skip_hidden,
+                signature=signature,
+                timeout=timeout,
+            )
+
+        return get_items_iterator_async(
+            _callback, limit=limit, offset=offset, chunk_size=chunk_size or DEFAULT_CHUNK_SIZE
+        )
+
+    async def get_items_as_bytes(
+        self,
+        *,
+        item_format: str = 'json',
+        offset: int | None = None,
+        limit: int | None = None,
+        desc: bool | None = None,
+        clean: bool | None = None,
+        bom: bool | None = None,
+        delimiter: str | None = None,
+        fields: list[str] | None = None,
+        omit: list[str] | None = None,
+        unwind: list[str] | None = None,
+        skip_empty: bool | None = None,
+        skip_header_row: bool | None = None,
+        skip_hidden: bool | None = None,
+        xml_root: str | None = None,
+        xml_row: str | None = None,
+        flatten: list[str] | None = None,
+        signature: str | None = None,
+        timeout: Timeout = 'long',
+    ) -> bytes:
+        """Get the items in the dataset as raw bytes.
+
+        https://docs.apify.com/api/v2#/reference/datasets/item-collection/get-items
+
+        Args:
+            item_format: Format of the results, possible values are: json, jsonl, csv, html, xlsx, xml and rss.
+                The default value is json.
+            offset: Number of items that should be skipped at the start. The default value is 0.
+            limit: Maximum number of items to return. By default there is no limit.
+            desc: By default, results are returned in the same order as they were stored. To reverse the order,
+                set this parameter to True.
+            clean: If True, returns only non-empty items and skips hidden fields (i.e. fields starting with
+                the # character). The clean parameter is just a shortcut for skip_hidden=True and skip_empty=True
+                parameters. Note that since some objects might be skipped from the output, that the result might
+                contain less items than the limit value.
+            bom: All text responses are encoded in UTF-8 encoding. By default, csv files are prefixed with
+                the UTF-8 Byte Order Mark (BOM), while json, jsonl, xml, html and rss files are not. If you want
+                to override this default behavior, specify bom=True query parameter to include the BOM or bom=False
+                to skip it.
+            delimiter: A delimiter character for CSV files. The default delimiter is a simple comma (,).
+            fields: A list of fields which should be picked from the items, only these fields will remain
+                in the resulting record objects. Note that the fields in the outputted items are sorted the same
+                way as they are specified in the fields parameter. You can use this feature to effectively fix
+                the output format.
+                You can use this feature to effectively fix the output format.
+            omit: A list of fields which should be omitted from the items.
+            unwind: A list of fields which should be unwound, in order which they should be processed. Each field
+                should be either an array or an object. If the field is an array then every element of the array
+                will become a separate record and merged with parent object. If the unwound field is an object then
+                it is merged with the parent object. If the unwound field is missing or its value is neither an array
+                nor an object and therefore cannot be merged with a parent object, then the item gets preserved
+                as it is. Note that the unwound items ignore the desc parameter.
+            skip_empty: If True, then empty items are skipped from the output. Note that if used, the results might
+                contain less items than the limit value.
+            skip_header_row: If True, then header row in the csv format is skipped.
+            skip_hidden: If True, then hidden fields are skipped from the output, i.e. fields starting with
+                the # character.
+            xml_root: Overrides default root element name of xml output. By default the root element is items.
+            xml_row: Overrides default element name that wraps each page or page function result object in xml output.
+                By default the element name is item.
+            flatten: A list of fields that should be flattened.
+            signature: Signature used to access the items.
+            timeout: Timeout for the API HTTP request.
+
+        Returns:
+            The dataset items as raw bytes.
+        """
+        request_params = self._build_params(
+            format=item_format,
+            offset=offset,
+            limit=limit,
+            desc=desc,
+            clean=clean,
+            bom=bom,
+            delimiter=delimiter,
+            fields=fields,
+            omit=omit,
+            unwind=unwind,
+            skipEmpty=skip_empty,
+            skipHeaderRow=skip_header_row,
+            skipHidden=skip_hidden,
+            xmlRoot=xml_root,
+            xmlRow=xml_row,
+            flatten=flatten,
+            signature=signature,
+        )
+
+        response = await self._http_client.call(
+            url=self._build_url('items'),
+            method='GET',
+            params=request_params,
+            timeout=timeout,
+        )
+
+        return response.content
+
+    @asynccontextmanager
+    async def stream_items(
+        self,
+        *,
+        item_format: str = 'json',
+        offset: int | None = None,
+        limit: int | None = None,
+        desc: bool | None = None,
+        clean: bool | None = None,
+        bom: bool | None = None,
+        delimiter: str | None = None,
+        fields: list[str] | None = None,
+        omit: list[str] | None = None,
+        unwind: list[str] | None = None,
+        skip_empty: bool | None = None,
+        skip_header_row: bool | None = None,
+        skip_hidden: bool | None = None,
+        xml_root: str | None = None,
+        xml_row: str | None = None,
+        signature: str | None = None,
+        timeout: Timeout = 'long',
+    ) -> AsyncIterator[HttpResponse]:
+        """Retrieve the items in the dataset as a stream.
+
+        https://docs.apify.com/api/v2#/reference/datasets/item-collection/get-items
+
+        Args:
+            item_format: Format of the results, possible values are: json, jsonl, csv, html, xlsx, xml and rss.
+                The default value is json.
+            offset: Number of items that should be skipped at the start. The default value is 0.
+            limit: Maximum number of items to return. By default there is no limit.
+            desc: By default, results are returned in the same order as they were stored. To reverse the order,
+                set this parameter to True.
+            clean: If True, returns only non-empty items and skips hidden fields (i.e. fields starting with
+                the # character). The clean parameter is just a shortcut for skip_hidden=True and skip_empty=True
+                parameters. Note that since some objects might be skipped from the output, that the result might
+                contain less items than the limit value.
+            bom: All text responses are encoded in UTF-8 encoding. By default, csv files are prefixed with
+                the UTF-8 Byte Order Mark (BOM), while json, jsonl, xml, html and rss files are not. If you want
+                to override this default behavior, specify bom=True query parameter to include the BOM or bom=False
+                to skip it.
+            delimiter: A delimiter character for CSV files. The default delimiter is a simple comma (,).
+            fields: A list of fields which should be picked from the items, only these fields will remain
+                in the resulting record objects. Note that the fields in the outputted items are sorted the same
+                way as they are specified in the fields parameter. You can use this feature to effectively fix
+                the output format.
+                You can use this feature to effectively fix the output format.
+            omit: A list of fields which should be omitted from the items.
+            unwind: A list of fields which should be unwound, in order which they should be processed. Each field
+                should be either an array or an object. If the field is an array then every element of the array
+                will become a separate record and merged with parent object. If the unwound field is an object then
+                it is merged with the parent object. If the unwound field is missing or its value is neither an array
+                nor an object and therefore cannot be merged with a parent object, then the item gets preserved
+                as it is. Note that the unwound items ignore the desc parameter.
+            skip_empty: If True, then empty items are skipped from the output. Note that if used, the results might
+                contain less items than the limit value.
+            skip_header_row: If True, then header row in the csv format is skipped.
+            skip_hidden: If True, then hidden fields are skipped from the output, i.e. fields starting with
+                the # character.
+            xml_root: Overrides default root element name of xml output. By default the root element is items.
+            xml_row: Overrides default element name that wraps each page or page function result object in xml output.
+                By default the element name is item.
+            signature: Signature used to access the items.
+            timeout: Timeout for the API HTTP request.
+
+        Returns:
+            The dataset items as a context-managed streaming `Response`.
+        """
+        response = None
+        try:
+            request_params = self._build_params(
+                format=item_format,
+                offset=offset,
+                limit=limit,
+                desc=desc,
+                clean=clean,
+                bom=bom,
+                delimiter=delimiter,
+                fields=fields,
+                omit=omit,
+                unwind=unwind,
+                skipEmpty=skip_empty,
+                skipHeaderRow=skip_header_row,
+                skipHidden=skip_hidden,
+                xmlRoot=xml_root,
+                xmlRow=xml_row,
+                signature=signature,
+            )
+
+            response = await self._http_client.call(
+                url=self._build_url('items'),
+                method='GET',
+                params=request_params,
+                stream=True,
+                timeout=timeout,
+            )
+            yield response
+        finally:
+            if response:
+                await response.aclose()
+
+    async def push_items(self, items: JsonSerializable, *, timeout: Timeout = 'medium') -> None:
+        """Push items to the dataset.
+
+        https://docs.apify.com/api/v2#/reference/datasets/item-collection/put-items
+
+        Args:
+            items: The items which to push in the dataset. Either a stringified JSON, a dictionary, or a list
+                of strings or dictionaries.
+            timeout: Timeout for the API HTTP request.
+        """
+        data = None
+        json = None
+
+        if isinstance(items, str):
+            data = items
+        else:
+            json = items
+
+        await self._http_client.call(
+            url=self._build_url('items'),
+            method='POST',
+            headers={'content-type': 'application/json; charset=utf-8'},
+            params=self._build_params(),
+            data=data,
+            json=json,
+            timeout=timeout,
+        )
+
+    async def get_statistics(self, *, timeout: Timeout = 'short') -> DatasetStatistics:
+        """Get the dataset statistics.
+
+        https://docs.apify.com/api/v2#tag/DatasetsStatistics/operation/dataset_statistics_get
+
+        Args:
+            timeout: Timeout for the API HTTP request.
+
+        Returns:
+            The dataset statistics.
+
+        Raises:
+            NotFoundError: If the dataset does not exist.
+        """
+        response = await self._http_client.call(
+            url=self._build_url('statistics'),
+            method='GET',
+            params=self._build_params(),
+            timeout=timeout,
+        )
+        result = response_to_dict(response)
+        return DatasetStatisticsResponse.model_validate(result).data
+
+    async def create_items_public_url(
+        self,
+        *,
+        offset: int | None = None,
+        limit: int | None = None,
+        clean: bool | None = None,
+        desc: bool | None = None,
+        fields: list[str] | None = None,
+        omit: list[str] | None = None,
+        unwind: list[str] | None = None,
+        skip_empty: bool | None = None,
+        skip_hidden: bool | None = None,
+        flatten: list[str] | None = None,
+        view: str | None = None,
+        expires_in: timedelta | None = None,
+        timeout: Timeout = 'long',
+    ) -> str:
+        """Generate a URL that can be used to access dataset items.
+
+        If the client has permission to access the dataset's URL signing key,
+        the URL will include a signature to verify its authenticity.
+
+        You can optionally control how long the signed URL should be valid using the `expires_in` option.
+        This value sets the expiration duration from the time the URL is generated.
+        If not provided, the URL will not expire.
+
+        Any other options (like `limit` or `offset`) will be included as query parameters in the URL.
+
+        Args:
+            offset: Number of items that should be skipped at the start. The default value is 0.
+            limit: Maximum number of items to return. By default there is no limit.
+            clean: If True, returns only non-empty items and skips hidden fields.
+            desc: By default, results are returned in the same order as they were stored. To reverse the order,
+                set this parameter to True.
+            fields: A list of fields which should be picked from the items.
+            omit: A list of fields which should be omitted from the items.
+            unwind: A list of fields which should be unwound, in order which they should be processed.
+            skip_empty: If True, then empty items are skipped from the output.
+            skip_hidden: If True, then hidden fields are skipped from the output.
+            flatten: A list of fields that should be flattened.
+            view: Name of the dataset view to be used.
+            expires_in: How long the signed URL should be valid.
+            timeout: Timeout for the API HTTP request.
+
+        Returns:
+            The public dataset items URL.
+        """
+        dataset = await self.get(timeout=timeout)
+
+        request_params = self._build_params(
+            offset=offset,
+            limit=limit,
+            desc=desc,
+            clean=clean,
+            fields=fields,
+            omit=omit,
+            unwind=unwind,
+            skipEmpty=skip_empty,
+            skipHidden=skip_hidden,
+            flatten=flatten,
+            view=view,
+        )
+
+        if dataset and dataset.url_signing_secret_key:
+            signature = create_storage_content_signature(
+                dataset.id,
+                dataset.url_signing_secret_key,
+                expires_in=expires_in,
+            )
+            request_params['signature'] = signature
+
+        items_public_url = urlparse(self._build_url('items', public=True))
+        filtered_params = {k: v for k, v in request_params.items() if v is not None}
+        if filtered_params:
+            items_public_url = items_public_url._replace(query=urlencode(filtered_params))
+
+        return urlunparse(items_public_url)
