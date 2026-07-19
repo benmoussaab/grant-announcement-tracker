@@ -1,12 +1,12 @@
 name: Daily Grant Scrape
 
+permissions:
+  contents: write
+
 on:
   schedule:
     - cron: '17 6 * * *'  # runs daily at 06:17 UTC
   workflow_dispatch:  # lets you trigger it manually too
-
-permissions:
-  contents: write
 
 jobs:
   scrape:
