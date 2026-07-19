@@ -1006,10 +1006,8 @@ with tab_groups:
     st.markdown("---")
     st.subheader("تصحيح التجميعات الخاطئة")
     st.caption(
-        "Pick a group below and edit the target name for any variant. Set a variant\'s "
-        "target back to its own original spelling to split it out of a wrong merge, or "
-        "type a different existing group name to manually merge it elsewhere. "
-        "Changes are saved permanently and apply the next time the dashboard loads."
+        "تم تجميع بعض اسماء الشركات المتشابهة بشكل تلقائي لتفادي تأثير الاخكاء الاملائية على النتائج ولكن في بعض الاحيان قد تحدث اخطاء
+        "يمكنك مراجعة الاسماء بنفسك والتأكد منها وتعديل ماتراه خاطئا "
     )
 
     entity_type = st.radio("نوع الكيان", ["الشركة", "البلدية"], horizontal=True)
