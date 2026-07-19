@@ -4,8 +4,10 @@ on:
   schedule:
     - cron: '17 6 * * *'  # runs daily at 06:17 UTC
   workflow_dispatch:  # lets you trigger it manually too
+
 permissions:
   contents: write
+
 jobs:
   scrape:
     runs-on: ubuntu-latest
@@ -36,4 +38,6 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add announcements.db scrape_progress.json
           git diff --staged --quiet || git commit -m "Daily scrape update"
-          git push https://${{ secrets.GIT_PUSH_TOKEN }}@github.com/benmoussaab/grant-announcement-tracker.git
+          git push https://${{ github.token }}@github.com/${{ github.repository }}.git
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
