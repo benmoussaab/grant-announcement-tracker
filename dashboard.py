@@ -6,7 +6,7 @@ reflects new data once the daily Airflow scraper is running.
 
 Run with: streamlit run dashboard.py
 """
-
+import io
 import json
 import re
 import sqlite3
