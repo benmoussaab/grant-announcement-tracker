@@ -1,0 +1,15 @@
+[theme]
+# The primary accent color for markers, sliders, and button borders
+primaryColor = "#1E88E5" 
+
+# The main background color of your dashboard
+backgroundColor = "#FFFFFF" 
+
+# The background color for the sidebar and interactive widgets
+secondaryBackgroundColor = "#F8F9FA" 
+
+# The color of your main text
+textColor = "#212121" 
+
+# The font family (options: "sans serif", "serif", or "monospace")
+font = "sans serif"
