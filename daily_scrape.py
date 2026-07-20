@@ -10,7 +10,7 @@ Or import `run_daily_scrape()` directly from an Airflow PythonOperator.
 """
 
 import sqlite3
-
+import pandas as pd
 from config import FACEBOOK_PAGE_URL, RESULTS_LIMIT
 from scraper import scrape_posts, get_yesterday_range
 from storage import init_db
@@ -37,6 +37,11 @@ def run_daily_scrape():
     conn.close()
     print("=== Daily scrape finished ===\n")
 
+def export_csv():
+    conn = sqlite3.connect("announcements.db")
+    df = pd.read_sql("SELECT * FROM announcements", conn)
+    conn.close()
+    df.to_csv("announcements_export.csv", index=False, encoding="utf-8-sig")
 
 if __name__ == "__main__":
     run_daily_scrape()
