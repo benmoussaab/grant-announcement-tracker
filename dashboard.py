@@ -26,6 +26,33 @@ st.set_page_config(
     menu_items={"About": "Municipal Grant Tracker — built with Streamlit"}
 )
 
+st.markdown("""
+    <style>
+    [data-testid="collapsedControl"] {
+        background-color: #00875A !important; /* لون خلفية الزر (أخضر ليكون واضحاً) */
+        color: white !important; /* لون السهم داخل الزر */
+        z-index: 999999 !important; /* إجبار الزر على الظهور فوق شريط العنوان */
+        position: fixed !important;
+        top: 12px !important;
+        right: 15px !important; /* تثبيته في أعلى اليمين متوافقاً مع اللغة العربية */
+        left: auto !important;
+        border-radius: 50% !important; /* جعله دائرياً وأنيقاً */
+        width: 40px !important;
+        height: 40px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.4) !important; /* ظل خفيف ليبرز */
+    }
+    
+    /* تغيير لون السهم الداخلي ليكون أبيض وواضح */
+    [data-testid="collapsedControl"] svg {
+        fill: white !important;
+        color: white !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 CUSTOM_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+Arabic:wght@300;400;500;600;700&display=swap');
