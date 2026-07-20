@@ -21,7 +21,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install apify-client google-genai rapidfuzz requests
+        run: pip install apify-client google-genai rapidfuzz requests pandas
 
       - name: Run daily scrape
         env:
