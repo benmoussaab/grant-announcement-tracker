@@ -783,6 +783,18 @@ with tab_explorer:
 
     st.divider()
 
+    csv_data = filtered[[
+    "date", "company_clean", "amount_in_dinars", "project_title",
+    "commune_clean", "cancelled", "cancellation_reason", "source_link",
+    ]].to_csv(index=False).encode("utf-8-sig")  # utf-8-sig keeps Arabic text readable when opened in Excel
+
+    st.download_button(
+    label="Download this data (CSV)",
+    data=csv_data,
+    file_name="grant_announcements.csv",
+    mime="text/csv",
+    )
+
     # ═══════════════════════════════════════════════════════════
     #  BUILD YOUR OWN CHART — ENHANCED WITH MORE FILTERS
     # ═══════════════════════════════════════════════════════════
