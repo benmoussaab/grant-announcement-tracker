@@ -5,3 +5,4 @@ requests
 streamlit
 plotly
 pandas
+xlsxwriter
