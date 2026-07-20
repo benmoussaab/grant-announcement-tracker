@@ -789,7 +789,7 @@ with tab_explorer:
     ]].to_csv(index=False).encode("utf-8-sig")  # utf-8-sig keeps Arabic text readable when opened in Excel
 
     st.download_button(
-    label="تحميل جدول البيانات csv",
+    label="تحميل البيانات 📥",
     data=csv_data,
     file_name="grant_announcements.csv",
     mime="text/csv",
