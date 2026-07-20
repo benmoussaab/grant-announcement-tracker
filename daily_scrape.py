@@ -17,6 +17,11 @@ from storage import init_db
 from progress import load_progress, save_progress
 from process import process_post
 
+def export_csv():
+    conn = sqlite3.connect("announcements.db")
+    df = pd.read_sql("SELECT * FROM announcements", conn)
+    conn.close()
+    df.to_csv("announcements_export.csv", index=False, encoding="utf-8-sig")
 
 def run_daily_scrape():
     init_db()
@@ -36,12 +41,9 @@ def run_daily_scrape():
 
     conn.close()
     print("=== Daily scrape finished ===\n")
+    export_csv()
 
-def export_csv():
-    conn = sqlite3.connect("announcements.db")
-    df = pd.read_sql("SELECT * FROM announcements", conn)
-    conn.close()
-    df.to_csv("announcements_export.csv", index=False, encoding="utf-8-sig")
+
 
 if __name__ == "__main__":
     run_daily_scrape()
