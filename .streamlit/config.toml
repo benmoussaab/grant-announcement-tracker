@@ -1,15 +1,14 @@
 [theme]
-# The primary accent color for markers, sliders, and button borders
-primaryColor = "#1E88E5" 
+# اللون الأساسي للأزرار والخطوط التفاعلية (اخترنا الأخضر المريح للمشاريع البلدية)
+primaryColor = "#00875A" 
 
-# The main background color of your dashboard
+# لون الخلفية الرئيسية (أبيض ناصع لتظهر الأرقام بوضوح)
 backgroundColor = "#FFFFFF" 
 
-# The background color for the sidebar and interactive widgets
+# لون خلفية البطاقات (Metrics) والشريط الجانبي (رمادي فاتح ومميز)
 secondaryBackgroundColor = "#F8F9FA" 
 
-# The color of your main text
-textColor = "#212121" 
+# لون النصوص الأساسية (أسود داكن لأعلى درجة وضوح وقراءة)
+textColor = "#1F2937" 
 
-# The font family (options: "sans serif", "serif", or "monospace")
 font = "sans serif"
