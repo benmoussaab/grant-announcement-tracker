@@ -80,7 +80,7 @@ CUSTOM_CSS = """
 /* ── Hide Streamlit chrome ── */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-header {visibility: hidden;}
+
 
 /* ── Global background ── */
 .stApp {
