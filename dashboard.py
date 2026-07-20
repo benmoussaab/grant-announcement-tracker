@@ -790,29 +790,36 @@ with tab_explorer:
 
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="Grants")
-        excel_data = buffer.getvalue()
+    # Changed 'df' to 'filtered' to match your CSV logic
+        filtered[[
+        "date", "company_clean", "amount_in_dinars", "project_title",
+        "commune_clean", "cancelled", "cancellation_reason", "source_link",
+        ]].to_excel(writer, index=False, sheet_name="Grants")
+    
+# CRITICAL FIX: This must be OUTSIDE the 'with' block
+    excel_data = buffer.getvalue()
 
 # 2. Create side-by-side buttons using columns
     col1, col2 = st.columns(2)
 
     with col1:
         st.download_button(
-        label="تحميل البيانات بصيغة CSV 📥",
-        data=csv_data,
-        file_name="grant_announcements.csv",
-        mime="text/csv",
-        use_container_width=True,
+            label="تحميل البيانات بصيغة CSV 📥",
+            data=csv_data,
+            file_name="grant_announcements.csv",
+            mime="text/csv",
+            use_container_width=True,
         )
-
+    
     with col2:
         st.download_button(
-        label="تحميل البيانات بصيغة Excel 📊",
-        data=excel_data,
-        file_name="grant_announcements.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
+            label="تحميل البيانات بصيغة Excel 📊",
+            data=excel_data,
+            file_name="grant_announcements.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
         )
+
 
     # ═══════════════════════════════════════════════════════════
     #  BUILD YOUR OWN CHART — ENHANCED WITH MORE FILTERS
