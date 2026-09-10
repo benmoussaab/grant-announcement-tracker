@@ -5,7 +5,7 @@ municipal Facebook page, extracts structured data from scanned Arabic-language
 document images using a vision-language model, and presents it in a public,
 interactive dashboard — with zero manual maintenance required.
 
-**Live dashboard:** [add your Streamlit Cloud URL here]
+**Live dashboard:** [(https://grant-announcement-tracker-rbsh3t64mwnqwvayndgxng.streamlit.app/)]
 
 ---
 
